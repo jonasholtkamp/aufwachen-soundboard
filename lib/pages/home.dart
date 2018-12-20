@@ -38,14 +38,27 @@ class _MyHomePageState extends State<MyHomePage> {
   Duration _position;
 
   bool _filteringStarred = false;
-  get soundsToDisplay =>
-      sounds.where((s) => !_filteringStarred || s.starred).toList();
+  bool _searching = false;
+  TextEditingController _filter = TextEditingController();
+  String _searchString;
+
+  get soundsToDisplay => sounds
+      .where((s) => !_filteringStarred || s.starred)
+      .where((s) =>
+          !_searching ||
+          _searchString == null ||
+          s.title.toLowerCase().contains(_searchString.toLowerCase()))
+      .toList();
 
   @override
   void initState() {
     super.initState();
     _initAudioPlayer();
     _initSounds();
+
+    _filter.addListener(() {
+      setState(() => _searchString = _filter.text);
+    });
   }
 
   @override
@@ -70,6 +83,30 @@ class _MyHomePageState extends State<MyHomePage> {
       sound.cached = false;
       _handleStop();
     });
+  }
+
+  /*
+   * UI item logic
+   */
+  _getTitle() => _searching
+      ? new TextField(
+          controller: _filter,
+          decoration: new InputDecoration(
+            prefixIcon: new Icon(Icons.search),
+            hintText: 'Search...',
+          ),
+        )
+      : Text(widget.title);
+
+  _getSearchIcon() => _searching ? Icon(Icons.close) : Icon(Icons.search);
+
+  ListTile _listBuilder(Sound sound) {
+    return ListTile(
+      leading: _getLeadingIcon(sound),
+      title: Text(sound.title),
+      onLongPress: () => sound.cached ? delete(sound, deletionHandler) : null,
+      trailing: _getTrailingIcon(sound),
+    );
   }
 
   _getLeadingIcon(Sound sound) {
@@ -100,7 +137,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   _getTrailingIcon(Sound sound) {
     return IconButton(
-      icon: sound.starred ? Icon(Icons.star, color: Theme.of(context).toggleableActiveColor) : Icon(Icons.star_border),
+      icon: sound.starred
+          ? Icon(Icons.star, color: Theme.of(context).toggleableActiveColor)
+          : Icon(Icons.star_border),
       onPressed: () {
         _preferences.save(sound.filename, "starred");
         setState(() {
@@ -114,12 +153,14 @@ class _MyHomePageState extends State<MyHomePage> {
       ? Icon(Icons.star, color: Theme.of(context).toggleableActiveColor)
       : Icon(Icons.star_border);
 
+  /*
+   * Action handlers
+   */
   _play(Sound sound) async {
     if (!_isActive(sound)) {
       _activeSound = sound;
       final file = await getLocalFile(sound);
-      final result =
-          await _audioPlayer.play(file.path, isLocal: true);
+      final result = await _audioPlayer.play(file.path, isLocal: true);
       if (result == 1) setState(() => _playerState = PlayerState.playing);
       return;
     }
@@ -134,6 +175,18 @@ class _MyHomePageState extends State<MyHomePage> {
     if (result == 1) setState(() => _playerState = PlayerState.playing);
   }
 
+  _filterStarred() async {
+    setState(() => _filteringStarred = !_filteringStarred);
+    _preferences.save("_filteringStarred", _filteringStarred.toString());
+  }
+
+  _toggleSearch() {
+    setState(() => _searching = !_searching);
+  }
+
+  /*
+   * Initialization
+   */
   _initAudioPlayer() {
     _audioPlayer = new AudioPlayer();
     _audioPlayer.durationHandler = (d) => setState(() => _duration = d);
@@ -161,44 +214,23 @@ class _MyHomePageState extends State<MyHomePage> {
     _position = _duration;
   }
 
-  _filterStarred() async {
-    setState(() => _filteringStarred = !_filteringStarred);
-    _preferences.save("_filteringStarred", _filteringStarred.toString());
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: _getTitle(),
         actions: <Widget>[
           IconButton(
             icon: _getFilterStarredIcon(),
             onPressed: () => _filterStarred(),
           ),
-          IconButton(
-            icon: Icon(Icons.search),
-            onPressed: () => {},
-          ),
+          IconButton(icon: _getSearchIcon(), onPressed: () => _toggleSearch()),
         ],
       ),
       body: ListView.builder(
         itemCount: soundsToDisplay.length,
-        itemBuilder: (buildContext, index) {
-          final sound = soundsToDisplay[index];
-
-          if (_filteringStarred && !sound.starred) {
-            return ListTile();
-          }
-
-          return ListTile(
-            leading: _getLeadingIcon(sound),
-            title: Text(sound.title),
-            onLongPress: () =>
-                sound.cached ? delete(sound, deletionHandler) : null,
-            trailing: _getTrailingIcon(sound),
-          );
-        },
+        itemBuilder: (buildContext, index) =>
+            _listBuilder(soundsToDisplay[index]),
       ),
     );
   }
