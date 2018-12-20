@@ -1,21 +1,11 @@
 import 'package:aufwachen_soundboard/file_handler.dart';
 import 'package:aufwachen_soundboard/preferences.dart';
+import 'package:aufwachen_soundboard/sound_handler.dart';
 import 'package:flutter/material.dart';
 
 import 'package:audioplayers/audioplayers.dart';
 
 import 'package:aufwachen_soundboard/sound.dart';
-
-final sounds = [
-  Sound('Wir kümmern uns', 'wirkuemmernuns.m4a'),
-  Sound('Zunichte gerammelt!', 'zunichtegerammelt.m4a'),
-  Sound('Puffjes gegessen', 'puffjesgegessen.m4a'),
-  Sound('Puffjes gefahren', 'puffjesgefahren.m4a'),
-  Sound('Angela Krank-Karrenbauer', 'akk.m4a'),
-  Sound('Das kann nicht sein so!', 'daskannnichtseinso.m4a'),
-  Sound('Entschuldigung!', 'entschuldigung.m4a'),
-  Sound('Der Verlierer ist die SPD', 'verliererspd.m4a'),
-];
 
 enum PlayerState { stopped, playing, paused }
 
@@ -31,6 +21,8 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   AudioPlayer _audioPlayer;
   Preferences _preferences = Preferences();
+
+  List<Sound> sounds = [];
 
   Sound _activeSound;
   PlayerState _playerState = PlayerState.stopped;
@@ -141,10 +133,10 @@ class _MyHomePageState extends State<MyHomePage> {
           ? Icon(Icons.star, color: Theme.of(context).toggleableActiveColor)
           : Icon(Icons.star_border),
       onPressed: () {
-        _preferences.save(sound.filename, "starred");
         setState(() {
           sound.starred = !sound.starred;
         });
+        _preferences.save(sound.filename, sound.starred ? "starred" : null);
       },
     );
   }
@@ -195,17 +187,13 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   _initSounds() async {
-    sounds.forEach((sound) async {
-      final file = await getLocalFile(sound);
-      final cached = await file.exists();
-      final starred = await _preferences.get(sound.filename) == "starred";
-      setState(() {
-        sound.cached = cached;
-        sound.starred = starred;
-      });
-    });
+    sounds = await initSounds();
+    final _filterStarredCache =
+        await _preferences.get("_filteringStarred") == "true";
 
-    _filteringStarred = await _preferences.get("_filteringStarred") == "true";
+    setState(() {
+      _filteringStarred = _filterStarredCache;
+    });
   }
 
   _handleStop() {
